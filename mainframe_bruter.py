@@ -254,7 +254,7 @@ def brute_APPLID(em,results,appfile):
 		em.delete_field() #Some inputs are dumb, and we need to blank the previous command
 		if cmdtype == 'APPLID' and validate_text(applid,8,cmdtype):
 			if noapplid: #LOGON launches TSO, so skips APPLID checks
-				break
+				continue
 			em.safe_send('LOGON APPLID('+applid.strip()+')')
 		elif cmdtype == "MACRO":
 			em.safe_send(applid.strip())
@@ -359,6 +359,8 @@ def brute_CICS(em,results,transfile):
 			else:
 				whine('TRANSID: ' + transid.strip() + ' TRANSID Found!',kind='good',level=1)
 				valid_trans.append(transid.strip())
+				em.reconnect()
+				enter_CICS(em)
 
 		else: # we were disconnected
 			whine(cmdtype+': ' + transid.strip() + ' Invalid (disconnected)',kind='warn',level=1)

